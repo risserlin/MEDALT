@@ -102,7 +102,7 @@ if (datatype=="D"){
   rownames(newdata)=rownames(data)[!is.na(index)]
   newdata=newdata[as.character(newdata[,1])!="chrM"&as.character(newdata[,1])!="chrY",]
   newdata[,1]=as.character(newdata[,1])
-  newdata[newdata[,1]=="chrX",1]="chr23"
+  #newdata[newdata[,1]=="chrX",1]="chr23"
   region=newdata[,1:2]
   region[,3]=region[,2]
   colnames(region)=c("chrom","chrompos","end")
@@ -111,14 +111,31 @@ if (datatype=="D"){
 }
 write.table(region,"region.bed",col.names = F,row.names = F,sep="\t",quote = F)
 
+
+print(paste("Number of regions written:", nrow(region),sep=" " ))
+
+# Check region.bed
+if (nrow(region) == 0) {
+  print("ERROR: region.bed is empty. No genomic regions were created from your input.")
+}
+
 ##correspond input genomic bin to genome band ID
 code=bedtools_intersect(paste("-a ",datapath,"/",hg,".band.bed -b region.bed",sep=""))
+
+print(paste("Running:", code,sep=" "))
+
 ans <- eval(code)
 ans=as.data.frame(ans)
 ans$ID=paste(ans$seqnames,":",ans$name,sep="")
 ans$ID1=paste(ans$seqnames,"_",ans$end,sep = "")
 region$ID1=paste(region$chrom,"_",region$chrompos,sep="")
 ID=unique(ans$ID)
+
+
+if (nrow(ans) == 0) {
+  print("ERROR: bedtools returned 0 overlaps. Your CNV regions do not map to any genome bands.")
+}
+
 
 #generate copy number matrix based on genome bandID
 newCNV=do.call(cbind,lapply(ID, function(id,data,ans,region){
@@ -145,6 +162,8 @@ cell$subtreesize=sapply(as.character(cell$cell),subtreeSize,cellTree=celltree)
 cell1=cell[cell$subtreesize>=5,]
 cell1=cell1[cell1$cell!="root",]
 
+#print(paste("dimensions of cells that have at least 5 children",dim(cell1),sep=" "))
+
 #calculte CFL at genomic bin level
 Gscore=lapply(as.character(cell1$cell),lineageScore,newCNV,celltree)
 names(Gscore)=as.character(cell1$cell)
@@ -153,6 +172,8 @@ names(Gscore)=as.character(cell1$cell)
 pathwaygene=read.csv(paste(datapath,"/pathwaygene.txt",sep=""),sep="\t")
 index=match(pathwaygene$name,reference[,1])
 pathwaygene=data.frame(chr=reference[index[!is.na(index)],2],start=reference[index[!is.na(index)],3],end=reference[index[!is.na(index)],4],name=pathwaygene$name[!is.na(index)],pathway=pathwaygene$pathway[!is.na(index)])
+
+
 
 #Gene level copy number profile
 if (datatype=="D"){
@@ -176,6 +197,7 @@ index=apply(oncogenicCNV,2,function(x){
 })
 oncogenicCNV=oncogenicCNV[,index==1]
 
+
 #Calculate CFL at gene level
 geneGscore=lapply(as.character(cell1$cell),lineageScore,oncogenicCNV,celltree)
 names(geneGscore)=as.character(cell1$cell)
@@ -186,6 +208,23 @@ print.noquote("Calculating permutation CFL")
 if (length(args) < 8){
   #if there was no permutation tree, calculate CFL in permutation dataset based on real tree structure
   times=500
+  #print(paste("DEBUG: ans =", ans,sep=" "))     
+  #write.table(ans,"ans.txt",col.names = T,row.names = T,sep="\t",quote = F)
+  #print(paste("DEBUG: length(ans) =", length(ans),sep=" "))     
+  #print(paste("DEBUG: length(data) =", length(data),sep=" "))     
+  #write.table(data,"data.txt",col.names = T,row.names = T,sep="\t",quote = F)
+  #print(paste("DEBUG: length(ID) =", length(ID),sep=" "))     
+  #print(paste("DEBUG: length(pathwaygene) =", length(pathwaygene),sep=" "))     
+  #write.table(ID,"ID.txt",col.names = T,row.names = T,sep="\t",quote = F)
+  #write.table(pathwaygene,"pathwaygene.txt",col.names = F,row.names = F,sep="\t",quote = F)
+  #print(paste("DEBUG: length(region) =", length(region),sep=" "))     
+  #write.table(region,"region.txt",col.names = T,row.names = T,sep="\t",quote = F)
+ # print(paste("DEBUG: region =", region,sep=" "))     
+  #print(paste("DEBUG: length(reference) =", length(reference),sep=" "))     
+  #print(paste("DEBUG: reference =", reference,sep=" "))     
+  #write.table(reference,"reference.txt",col.names = T,row.names = T,sep="\t",quote = F)
+  #print(paste("DEBUG: length(celltree) =", length(celltree),sep=" "))     
+  #write.table(celltree,"celltree.txt",col.names = T,row.names = T,sep="\t",quote = F)
   permuteres=lapply(1:times,function(j,data,ID,ans,datatype,pathwaygene,generegion,reference,celltree){
     score=permuteScore(data,ID,ans,datatype,pathwaygene,generegion=region,reference,celltree)
     return(score)
@@ -200,6 +239,8 @@ if (length(args) < 8){
     permuteres=lapply(permutefile,permuteTreeScore,ID,ans,datatype,pathwaygene,generegion=region,reference,permutationPath)
   }
 }
+
+print("got to the end of permutations")
 
 #Estimate emperical p value
 print.noquote("Estimate emperical p value")
@@ -217,6 +258,8 @@ if (length(args) < 8){
   bandsig=CollectAsso(pvalue,cutoff=0.05,celltree,realcell)$bandres
   genesig=CollectAsso(pvalue,cutoff=0.05,celltree,realcell)$generes
 }
+
+
 bandsig=do.call(rbind,lapply(unique(as.character(bandsig$cell)),mergeCNA,bandsig,band.region,arm.band,refer.band))
 bandsig=unique(bandsig)
 genesig=unique(genesig)

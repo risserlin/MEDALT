@@ -71,16 +71,20 @@ permuteGene <- function(CNV,reference){
   CNV=t(CNV)
   index=match(colnames(CNV),as.character(reference[,1]))
   chr=as.character(reference[index,2])
-  chr[chr=="chrX"]="chr23"
-  chr[chr=="chrY"]="chr24"
+  #chr[chr=="chrX"]="chr23"
+  #chr[chr=="chrY"]="chr24"
   colnames(CNV)=paste(chr,"_",colnames(CNV),sep="")
   chr=colnames(CNV)
   chr=do.call(rbind,strsplit(chr,split="_"))
   chr=unique(chr[,1])
   CNV1=do.call(cbind,lapply(chr,function(j,CNV){
       subCNV=CNV[,grep(paste(j,"_",sep=""),colnames(CNV))]
-      index=sample(1:dim(subCNV)[1],dim(subCNV)[1])
-      return(subCNV[index,])
+      if(is.null(dim(subCNV))){
+            return(subCNV)
+        } else{
+            index=sample(1:dim(subCNV)[1],dim(subCNV)[1])
+            return(subCNV[index,])
+        }
   },CNV=CNV))
   genename=do.call(rbind,strsplit(colnames(CNV),split="_"))[,2]
   colnames(CNV1)=genename

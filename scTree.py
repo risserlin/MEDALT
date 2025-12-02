@@ -59,6 +59,7 @@ def main():
     if not options.Path or not options.Input or not options.Datatype or not options.Genome:
         op.print_help()
         sys.exit(1)
+    
 
     # get the input parameters
     currentPath=os.getcwd()
@@ -170,7 +171,7 @@ def main():
     os.chdir(outpath)
     print "Done!"
     os.system("rm -r temp")
-    os.system("rm "+CNVfile)
+    #os.system("rm "+CNVfile)
 
 if __name__ == "__main__":
 
