@@ -59,7 +59,7 @@ rt_col <- c("black", rt_pal(max(sct_nodes$dist))) ; sct_nodes$dist_col <- rt_col
 rt_col <- c("black", rt_pal(max(sct_nodes$dpth))) ; sct_nodes$dpth_col <- rt_col[sct_nodes$dpth+1]
 
 # use edge "betweenness" to set the width of edges
-eg_btw <- edge.betweenness(sct_graph)/20
+eg_btw <- edge_betweenness(sct_graph)/20
 eg_pal <- colorRampPalette(c("#3B3B3B", "#9C9C9C"))
 eg_col <- eg_pal(max(sct_edges$len)+1)
 

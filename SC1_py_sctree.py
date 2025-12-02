@@ -3,7 +3,9 @@ import os,sys
 import numpy as np
 import pandas as pd
 from datetime import datetime as dt_
+from collections import defaultdict
 from SP1_SCT_UTIL import *
+#from rdmst_solver import compute_rdmst
 
 def main():
     ### Initialing variables #####################################################################
@@ -124,12 +126,17 @@ def main():
     print("### going back to SC1_py_sctree.py                ###")
     print("#####################################################\n")
     print("initializing tree")
-    tree_dict = create_tree(nodes, node_list, root, df_cor=None, len_threshold=30)  
+    #tree_dict = create_tree(nodes, node_list, root, df_cor=None, len_threshold=30)  
+    tree_dict = create_tree(nodes, node_list, root, proximity=True, len_threshold=30, df_cor=None)
     # set df_cor to None and leave proximity to True if no spatial coordinate information is provided
     # this will automatically calculate pairwise MED instead of only connecting cells within close proximity
     
     print("computing rdmst")
-    tree = compute_rdmst(tree_dict, root)[0]
+    #tree = compute_rdmst(tree_dict, root)[0]
+    
+    # New call with dynamic chunking and memory safety:
+    tree, weight = compute_rdmst(g=tree_dict,root=root,recursive=False, parallel=True, max_workers=8)
+
     with open(SCTREE_PATH,'w') as write:
         write.write("\t".join(["stt", "end", "len"])+"\n") # header line
         for in_node in tree.keys():
@@ -162,8 +169,11 @@ def main():
             permutefile=permutationPath+"/permute."+str(j)+".CNV.txt"
             (nodes,root) = read(permutefile)
             node_name_list = nodes.keys()
-            g = create_tree(nodes, node_name_list,root)
-            result = compute_rdmst(g, root)
+            #g = create_tree(nodes, node_name_list,root)
+            g = create_tree(nodes, node_name_list, root, proximity=True, len_threshold=30, df_cor=None)
+            #result = compute_rdmst(g, root)
+            tree, weight = compute_rdmst(g=tree_dict,root=root,recursive=False, parallel=True, max_workers=8)
+            result = tree
             permuteTree=permutefile+".celltree.txt"
             write=open(permuteTree,'w')
             tree=result[0]

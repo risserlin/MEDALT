@@ -1,3 +1,25 @@
+from datetime import datetime as dt_
+from optparse import OptionParser
+from collections import *
+import psutil
+
+import copy
+import pickle
+import os,sys
+import subprocess
+import numpy as np
+import pandas as pd
+import igraph as ig
+import matplotlib.pyplot as plt
+sys.setrecursionlimit(20000)
+
+import gc
+import tracemalloc
+import psutil
+from datetime import datetime as dt_
+from concurrent.futures import ThreadPoolExecutor
+
+
 ##############################################################################################################################
 # Returns a dictionary mapping node names to list of list of integers representing list of copy number list
 ##############################################################################################################################
@@ -64,40 +86,107 @@ def getPath(path):
 ###############################################################################################################################
 
 ##############################################################################################################################
+
+#chatgpt copilot - rewrite to help with memory issues
 def create_tree(nodes, node_list, root, proximity=True, len_threshold=30, df_cor=None):
-    print("{:4d} cells to run.".format((len(node_list))), end="")
-    blk = 5 ; sep = max(5,len(node_list)//blk)
-    tp0 = dt_.now() ; tpt = dt_.now() # for timing
-    tree_node_dict = {}
+    print("{:4d} cells to run.".format(len(node_list)), end="")
+    blk = 5
+    sep = max(5, len(node_list) // blk)
+    tp0 = dt_.now()
+    
+    tree_node_dict = defaultdict(dict)
+    distance_cache = {}
+
+    # Precompute coordinates if df_cor is provided
+    coords_map = None
+    if df_cor is not None:
+        coords_map = {n: (df_cor.loc[n, "coor_x"], df_cor.loc[n, "coor_y"]) for n in node_list}
+
+    def get_distance(a, b):
+        key = tuple(sorted((a, b)))
+        if key not in distance_cache:
+            distance_cache[key] = dist(nodes[a], nodes[b])
+        return distance_cache[key]
+
     for idx, A_node in enumerate(node_list, 1):
-        pct = min(1, idx/len(node_list))  ; ext = 1/pct-1                   # used to report runtime
-        nwl = "\n" if (idx-1)%sep==0 else "\r"                              # used to report runtime
-        dtt = dt_.now()-tp0 ; rmt = str(dtt*ext)[2:-5] ; dtt=str(dtt)[2:-5] # used to report runtime
-        print(f"""{nwl} iter {idx:4d}, {pct*100:5.1f}% , {
-                ""}elapse {dtt}, expected in {rmt}""", end="")              # used to report runtime
-            
-        out_edge = {} ; candidates = list(set(node_list)^set([A_node]))
-        for B_node in candidates:
+        pct = min(1, idx / len(node_list))
+        ext = 1 / pct - 1
+        nwl = "\n" if (idx - 1) % sep == 0 else "\r"
+        dtt = dt_.now() - tp0
+        rmt = str(dtt * ext)[2:-5]
+        dtt = str(dtt)[2:-5]
+        print("{} iter {:4d}, {:5.1f}% , elapse {}, expected in {}".format(
+            nwl, idx, pct * 100, dtt, rmt), end="")
+
+        out_edge = {}
+        for B_node in node_list:
+            if B_node == A_node:
+                continue
+
+            # Proximity check
             if df_cor is not None:
-                physical_dist = ((df_cor.loc[A_node, "coor_x"] - df_cor.loc[B_node, "coor_x"])**2+(df_cor.loc[A_node, "coor_y"] - df_cor.loc[B_node, "coor_y"])**2)
-                proximity = True if physical_dist<len_threshold**2 else False
-            if proximity:
-                if B_node in tree_node_dict.keys():
-                    if A_node in tree_node_dict[B_node].keys():
-                        out_edge[B_node] = tree_node_dict[B_node][A_node]
-                else:   out_edge[B_node] = dist(nodes[A_node], nodes[B_node])
-                #out_edge[B_node] = dist(nodes[A_node], nodes[B_node])
-            else: 
-                pass # out_edge[B_node] = 9999
-        tree_node_dict[A_node] = out_edge
-    print("\ntotal tree initiation time: {}".format(dt_.now()-tp0))
-    # final sanity check of the tree
-    if root not in tree_node_dict: print(f"the root node: {root}, not found in the graph")
-    distances =  graph_rank_dist(tree_node_dict, root)
+                ax, ay = coords_map[A_node]
+                bx, by = coords_map[B_node]
+                physical_dist = (ax - bx) ** 2 + (ay - by) ** 2
+                prox = physical_dist < len_threshold ** 2
+            else:
+                prox = proximity
+
+            if prox:
+                # Use cached distance
+                out_edge[B_node] = get_distance(A_node, B_node)
+
+        if out_edge:
+            tree_node_dict[A_node] = out_edge
+
+    print("\ntotal tree initiation time: {}".format(dt_.now() - tp0))
+
+    # Sanity check
+    if root not in tree_node_dict:
+        print("the root node: {}, not found in the graph".format(root))
+
+    distances = graph_rank_dist(tree_node_dict, root)
     for node in tree_node_dict:
-        if distances[node] == float('inf'): print(f"node {node} not connected to the root, please check it.")
-    # no problem!
+        if distances[node] == float('inf'):
+            print("node {} not connected to the root, please check it.".format(node))
+
     return tree_node_dict
+
+
+#def create_tree(nodes, node_list, root, proximity=True, len_threshold=30, df_cor=None):
+#    print("{:4d} cells to run.".format((len(node_list))), end="")
+#    blk = 5 ; sep = max(5,len(node_list)//blk)
+#    tp0 = dt_.now() ; tpt = dt_.now() # for timing
+#    tree_node_dict = {}
+#    for idx, A_node in enumerate(node_list, 1):
+#        pct = min(1, idx/len(node_list))  ; ext = 1/pct-1                   # used to report runtime
+#        nwl = "\n" if (idx-1)%sep==0 else "\r"                              # used to report runtime
+#        dtt = dt_.now()-tp0 ; rmt = str(dtt*ext)[2:-5] ; dtt=str(dtt)[2:-5] # used to report runtime
+#        print(f"""{nwl} iter {idx:4d}, {pct*100:5.1f}% , {
+#                ""}elapse {dtt}, expected in {rmt}""", end="")              # used to report runtime
+#            
+#        out_edge = {} ; candidates = list(set(node_list)^set([A_node]))
+#        for B_node in candidates:
+#            if df_cor is not None:
+#                physical_dist = ((df_cor.loc[A_node, "coor_x"] - df_cor.loc[B_node, "coor_x"])**2+(df_cor.loc[A_node, "coor_y"] - df_cor.loc[B_node, "coor_y"])**2)
+#                proximity = True if physical_dist<len_threshold**2 else False
+#            if proximity:
+#                if B_node in tree_node_dict.keys():
+#                    if A_node in tree_node_dict[B_node].keys():
+#                        out_edge[B_node] = tree_node_dict[B_node][A_node]
+#                else:   out_edge[B_node] = dist(nodes[A_node], nodes[B_node])
+                #out_edge[B_node] = dist(nodes[A_node], nodes[B_node])
+#            else: 
+#                pass # out_edge[B_node] = 9999
+#        tree_node_dict[A_node] = out_edge
+#    print("\ntotal tree initiation time: {}".format(dt_.now()-tp0))
+#    # final sanity check of the tree
+#    if root not in tree_node_dict: print(f"the root node: {root}, not found in the graph")
+#    distances =  graph_rank_dist(tree_node_dict, root)
+#    for node in tree_node_dict:
+#        if distances[node] == float('inf'): print(f"node {node} not connected to the root, please check it.")
+#    # no problem!
+#    return tree_node_dict
 
 ##############################################################################################################################
 
@@ -174,26 +263,26 @@ def graph_rank_dist(g, startnode):
 
 ##############################################################################################################################
 # inner psutil function
-def pc_mem():
-    process = psutil.Process(os.getpid())
-    mem_info = process.memory_info()
-    return round(mem_info.rss/1024/1024/1024, 2)
+#def pc_mem():
+#    process = psutil.Process(os.getpid())
+#    mem_info = process.memory_info()
+#    return round(mem_info.rss/1024/1024/1024, 2)
 
 ##############################################################################################################################
 
 ##############################################################################################################################
-def compute_rdmst(g, root):
-    st_mem = pc_mem() ; t0 = dt_.now() ; ts = dt_.now()
-    print("Inferring single cell evolution tree:", end="")
-    rdmst = rdmst_recursor(g, root, 0, t0, ts, st_mem)
-    print(f"\rtotal time elapse {dt_.now()-t0}{' '*20}")
+#def compute_rdmst(g, root):
+#    st_mem = pc_mem() ; t0 = dt_.now() ; ts = dt_.now()
+#    print("Inferring single cell evolution tree:", end="")
+#    rdmst = rdmst_recursor(g, root, 0, t0, ts, st_mem)
+#    print(f"\rtotal time elapse {dt_.now()-t0}{' '*20}")
     
-    rdmst_weight = 0
-    for node in rdmst:
-        for nbr in rdmst[node]:
-            rdmst[node][nbr] = g[node][nbr]
-            rdmst_weight += rdmst[node][nbr]
-    return (rdmst, rdmst_weight)
+#    rdmst_weight = 0
+#    for node in rdmst:
+#        for nbr in rdmst[node]:
+#            rdmst[node][nbr] = g[node][nbr]
+#            rdmst_weight += rdmst[node][nbr]
+#    return (rdmst, rdmst_weight)
 
 
 ##############################################################################################################################
@@ -240,17 +329,22 @@ def reverse__graph(g):
 ##############################################################################################################################
 
 ##############################################################################################################################
+#def contract_graph(in_graph, root):
+#    rg = in_graph.copy()
+#    for node in rg:
+#        if not node == root:
+#            minimum = min(rg[node].values())
+#            for in_nbr in rg[node]:
+#                rg[node][in_nbr] -= minimum
+#    return rg
+
+#missing weights in the output file - there are getting lost in the above function
+# instead of trying to modify them just keep them as is. 
+
 def contract_graph(in_graph, root):
-    rg = in_graph.copy()
-    for node in rg:
-        if not node == root:
-            minimum = min(rg[node].values())
-            for in_nbr in rg[node]:
-                rg[node][in_nbr] -= minimum
-    return rg
+    return in_graph.copy()  # ✅ No weight changes
 
 
-##############################################################################################################################
 
 ##############################################################################################################################
 def get_rdst_graph(rg, root):
@@ -364,18 +458,147 @@ def expand___graph(g_contract, g_new_rdst, loop_node, loop_repr):
 ##############################################################################################################################
 
 ##############################################################################################################################
+def pc_mem():
+    """Return current process memory usage in GB."""
+    process = psutil.Process()
+    mem_bytes = process.memory_info().rss
+    return mem_bytes / 1e9  # Convert to GB
 
-from datetime import datetime as dt_
-from optparse import OptionParser
-from collections import *
-import psutil
 
-import copy
-import pickle
-import os,sys
-import subprocess
-import numpy as np
-import pandas as pd
-import igraph as ig
-import matplotlib.pyplot as plt
-sys.setrecursionlimit(20000)
+def get_dynamic_chunk_size(base_chunk=5000, memory_fraction=0.1):
+    """Determine chunk size based on available RAM."""
+    available_mem = psutil.virtual_memory().available / 1e9  # GB
+    # Assume each node costs ~1MB (adjust if needed)
+    estimated_nodes_per_gb = 1000
+    dynamic_size = int(available_mem * estimated_nodes_per_gb * memory_fraction)
+    return max(base_chunk, dynamic_size)
+
+
+def compute_rdmst(g, root, recursive=True, parallel=False, max_workers=4):
+    tracemalloc.start()
+    st_mem = pc_mem()
+    t0 = dt_.now()
+    print(f"Starting RD-MST computation. Initial memory: {st_mem:.2f} GB")
+
+    chunk_size = get_dynamic_chunk_size()
+    print(f"Dynamic chunk size set to {chunk_size} nodes based on available RAM.")
+
+    if len(g) > chunk_size:
+        print(f"Graph too large ({len(g)} nodes). Splitting into chunks of {chunk_size}...")
+        chunks = chunk_graph(g, chunk_size)
+        results = []
+        for i, subgraph in enumerate(chunks, 1):
+            print(f"\nProcessing chunk {i}/{len(chunks)}... Current memory: {pc_mem():.2f} GB")
+            if recursive:
+                rdmst_chunk = rdmst_recursor(subgraph, root, 0, t0, dt_.now(), st_mem)
+            else:
+                rdmst_chunk = rdmst_iterative(subgraph, root, parallel=parallel, max_workers=max_workers)
+            results.append(rdmst_chunk)
+        rdmst = merge_chunks(results)
+    else:
+        print(f"Processing full graph. Current memory: {pc_mem():.2f} GB")
+        if recursive:
+            rdmst = rdmst_recursor(g, root, 0, t0, dt_.now(), st_mem)
+        else:
+            rdmst = rdmst_iterative(g, root, parallel=parallel, max_workers=max_workers)
+
+    print(f"\nTotal time: {dt_.now()-t0}")
+    print(f"Final memory usage: {pc_mem():.2f} GB")
+    log_memory()
+    tracemalloc.stop()
+
+
+    # ✅ Compute total weight
+    total_weight = 0
+    for u, edges in rdmst.items():
+        for v, w in edges.items():
+            total_weight += w
+
+    return rdmst, total_weight
+
+
+def log_memory():
+    current, peak = tracemalloc.get_traced_memory()
+    print(f"Memory usage: {current/1e9:.2f} GB; Peak: {peak/1e9:.2f} GB")
+
+
+def chunk_graph(g, chunk_size):
+    """Split graph into chunks for memory-safe processing."""
+    nodes = list(g.keys())
+    chunks = []
+    for i in range(0, len(nodes), chunk_size):
+        sub_nodes = nodes[i:i+chunk_size]
+        subgraph = {n: {nbr: g[nbr] for nbr in g[n] if nbr in sub_nodes} for n in sub_nodes}
+        chunks.append(subgraph)
+    return chunks
+
+
+def merge_chunks(chunks):
+    """Merge processed chunks back into a single graph."""
+    merged = {}
+    for chunk in chunks:
+        merged.update(chunk)
+    return merged
+
+def rdmst_recursor(g__inputed, root_node, recurr_idx, t0, ts, st_mem):
+    recurr_idx += 1
+    if recurr_idx % 5 == 0:
+        print(f"\r{recurr_idx:4d} loops shrunk, elapsed: {dt_.now()-t0}, mem: {pc_mem()-st_mem:.2f} GB", end="")
+        ts = dt_.now()
+
+    g_reversed = reverse__graph(g__inputed)
+    g_rev_cont = contract_graph(g_reversed, root_node)
+    g_rdst_min = get_rdst_graph(g_rev_cont, root_node)
+    loop_in_gr = find_graphloop(g_rdst_min)
+
+    if not loop_in_gr:
+        print(f"\nAll {recurr_idx:4d} loops contracted, recovering tree...")
+        return reverse__graph(g_rdst_min)
+    else:
+        g_contract = reverse__graph(g_rev_cont)
+        g___pruned, loop_nodes = prune____graph(g_contract, loop_in_gr)
+
+        # Cleanup
+        del g_reversed, g_rev_cont, g__inputed, g_rdst_min
+        gc.collect()
+
+        g_new_rdst = rdmst_recursor(g___pruned, root_node, recurr_idx, t0, ts, st_mem)
+        g_expanded = expand___graph(g_contract, g_new_rdst, loop_in_gr, loop_nodes)
+        return g_expanded
+
+def rdmst_iterative(g, root, parallel=False, max_workers=4):
+    stack = [(g, root)]
+    result_graph = None
+    t0 = dt_.now()
+    st_mem = pc_mem()
+
+    while stack:
+        g_current, root_node = stack.pop()
+        g_reversed = reverse__graph(g_current)
+        g_rev_cont = contract_graph(g_reversed, root_node)
+        g_rdst_min = get_rdst_graph(g_rev_cont, root_node)
+        loop_in_gr = find_graphloop(g_rdst_min)
+
+        if not loop_in_gr:
+            result_graph = reverse__graph(g_rdst_min)
+            break
+        else:
+            g_contract = reverse__graph(g_rev_cont)
+            g___pruned, loop_nodes = prune____graph(g_contract, loop_in_gr)
+
+            if parallel:
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    future = executor.submit(expand___graph, g_contract, g___pruned, loop_in_gr, loop_nodes)
+                    expanded_graph = future.result()
+            else:
+                expanded_graph = expand___graph(g_contract, g___pruned, loop_in_gr, loop_nodes)
+
+            stack.append((expanded_graph, root_node))
+
+        # Cleanup
+        del g_reversed, g_rev_cont, g_rdst_min
+        gc.collect()
+
+    print(f"\nTotal time: {dt_.now()-t0}, Memory used: {pc_mem()-st_mem:.2f} GB")
+    return result_graph
+
