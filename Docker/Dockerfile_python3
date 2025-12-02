@@ -1,0 +1,38 @@
+FROM bioconductor/tidyverse
+ 
+#install essential apps
+RUN apt-get update
+RUN apt-get -y install wget git git-lfs vim
+
+
+# install required R libraries
+RUN R -e "install.packages('igraph',dependencies=TRUE, repos='http://cran.rstudio.com/')"
+RUN R -e "install.packages('BiocManager',dependencies=TRUE, repos='http://cran.rstudio.com/')"
+
+RUN R -e "BiocManager::install(ask = F)" 
+RUN R -e "BiocManager::install('HelloRanges', dependencies=TRUE,force=TRUE)"
+
+#install Medalt
+RUN mkdir /medalt_home
+WORKDIR /medalt_home
+
+RUN git clone https://github.com/KCHEN-lab/MEDALT.git
+
+RUN apt-get -y install python2.7 
+
+#RUN ln -s /usr/bin/python2.7 /usr/bin/python
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
+#install required python3 libraries for the medalt 
+RUN pip install psutil
+RUN pip install matplotlib
+RUN pip install igraph
+
+WORKDIR /medalt_home/MEDALT
+
+RUN mkdir /medalt_home/MEDALT/genomes
+COPY ./gen* /medalt_home/MEDALT/genomes/
+COPY ./hg* /medalt_home/MEDALT/genomes/
+COPY ./path* /medalt_home/MEDALT/genomes/
+
+ENTRYPOINT ["python","./SC1_py_sctree.py"]
