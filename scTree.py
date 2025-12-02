@@ -60,6 +60,7 @@ def main():
         op.print_help()
         sys.exit(1)
     
+    print "Starting process"
 
     # get the input parameters
     currentPath=os.getcwd()
@@ -84,6 +85,7 @@ def main():
     else:
         permutation=options.Permutation
     print "Transfer data to segmental level"
+    sys.stdout.flush()
 
     #change the input copy number profile to the matrix format used to infer Tree
     #if the data type = R, estimate integer copy number profile by merging the number of adjacent genes.
@@ -101,6 +103,7 @@ def main():
         print "Please provide the correct inputfile type through -D either 'D' or 'R'."
     CNVfile=filename+".CNV.txt"
     print "Inferring MEDALT."
+    sys.stdout.flush()
 
     #Identifying root node from input file.
     #If a diploidy genome is not input, will add an extra diploidy node as root
@@ -123,6 +126,7 @@ def main():
             print >> write,out1
     write.close()
     print "MEDALT inferrence finish."
+    sys.stdout.flush()
 
     #Permutation process for lineage speciation analysis (LSA)
     #Permutate the copy number profile by chromosome into different cells
@@ -170,7 +174,7 @@ def main():
         os.system("Rscript "+scTreepath+"LSA.tree.R "+scTreepath+" "+filename+" "+writename+" "+CNVfile+" "+outpath+" "+datatype+" "+hg)
     os.chdir(outpath)
     print "Done!"
-    os.system("rm -r temp")
+    #os.system("rm -r temp")
     #os.system("rm "+CNVfile)
 
 if __name__ == "__main__":
