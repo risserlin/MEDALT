@@ -21,8 +21,10 @@ if (!"HelloRanges" %in% installed.packages()){
 if (!"igraph" %in% installed.packages()){
   install.packages("igraph")
 }
+suppressPackageStartupMessages({
 library(HelloRanges)
 library(igraph)
+})
 
 #read input
 args<-commandArgs(T)
@@ -122,7 +124,7 @@ if (nrow(region) == 0) {
 ##correspond input genomic bin to genome band ID
 code=bedtools_intersect(paste("-a ",datapath,"/",hg,".band.bed -b region.bed",sep=""))
 
-print(paste("Running:", code,sep=" "))
+#print(paste("Running:", code,sep=" "))
 
 ans <- eval(code)
 ans=as.data.frame(ans)
@@ -204,10 +206,56 @@ names(geneGscore)=as.character(cell1$cell)
 realres=list(cell=cell1,bandGscore=Gscore,geneGscore=geneGscore)
 
 #do calculation for permutation dataset
-print.noquote("Calculating permutation CFL")
-if (length(args) < 8){
+
+start_time <- Sys.time()
+print.noquote(paste(start_time, "- Calculating permutation CFL"))
+
+if (length(args) < 8) {
+  print.noquote(paste(Sys.time(), "- No permutation tree provided. Calculating CFL based on real tree structure..."))
+  times = 500
+  print.noquote(paste(Sys.time(), "- Running", times, "permutations..."))
+  
+  permuteres = lapply(1:times, function(j, data, ID, ans, datatype, pathwaygene, generegion, reference, celltree) {
+    if (j %% 50 == 0) {
+      print.noquote(paste(Sys.time(), "- Progress:", j, "of", times, "permutations completed"))
+    }
+    score = permuteScore(data, ID, ans, datatype, pathwaygene, generegion = region, reference, celltree)
+    return(score)
+  }, data, ID, ans, datatype, pathwaygene, generegion = region, reference, celltree)
+  
+  end_time <- Sys.time()
+  elapsed <- difftime(end_time, start_time, units = "secs")
+  print.noquote(paste(end_time, "- Permutation CFL calculation completed. Total elapsed time:", round(elapsed, 2), "seconds"))
+  
+} else if (length(args) == 8) {
+  print.noquote(paste(Sys.time(), "- Permutation trees detected. Calculating CFL based on permuted tree structure..."))
+  
+  permutefile = list.files(permutationPath)
+  permutefile = permutefile[grep("celltree", permutefile)]
+  times = length(permutefile)
+  
+  print.noquote(paste(Sys.time(), "- There are", times, "permutation trees."))
+  
+  if (length(permutefile) > 0) {
+    print.noquote(paste(Sys.time(), "- Starting CFL calculation for permutation trees..."))
+    
+    permuteres = lapply(seq_along(permutefile), function(i) {
+      if (i %% 10 == 0) {
+        print.noquote(paste(Sys.time(), "- Progress:", i, "of", times, "trees processed"))
+      }
+      permuteTreeScore(permutefile[i], ID, ans, datatype, pathwaygene, generegion = region, reference, permutationPath)
+    })
+    
+    end_time <- Sys.time()
+    elapsed <- difftime(end_time, start_time, units = "secs")
+    print.noquote(paste(end_time, "- Permutation CFL calculation completed. Total elapsed time:", round(elapsed, 2), "seconds"))
+  }
+}
+#commented out original version
+#if (length(args) < 8){
   #if there was no permutation tree, calculate CFL in permutation dataset based on real tree structure
-  times=500
+#  print.noquote("Calculating permutation CFL- based on real tree structure")
+#  times=500
   #print(paste("DEBUG: ans =", ans,sep=" "))     
   #write.table(ans,"ans.txt",col.names = T,row.names = T,sep="\t",quote = F)
   #print(paste("DEBUG: length(ans) =", length(ans),sep=" "))     
@@ -225,25 +273,26 @@ if (length(args) < 8){
   #write.table(reference,"reference.txt",col.names = T,row.names = T,sep="\t",quote = F)
   #print(paste("DEBUG: length(celltree) =", length(celltree),sep=" "))     
   #write.table(celltree,"celltree.txt",col.names = T,row.names = T,sep="\t",quote = F)
-  permuteres=lapply(1:times,function(j,data,ID,ans,datatype,pathwaygene,generegion,reference,celltree){
-    score=permuteScore(data,ID,ans,datatype,pathwaygene,generegion=region,reference,celltree)
-    return(score)
-  },data,ID,ans,datatype,pathwaygene,generegion=region,reference,celltree)
-}else if (length(args)==8){
+#  permuteres=lapply(1:times,function(j,data,ID,ans,datatype,pathwaygene,generegion,reference,celltree){
+#    score=permuteScore(data,ID,ans,datatype,pathwaygene,generegion=region,reference,celltree)
+#    return(score)
+#  },data,ID,ans,datatype,pathwaygene,generegion=region,reference,celltree)
+#}else if (length(args)==8){
   #if there are permutation trees, calculate CFL in permutation dataset based on permuted tree structure
-  permutefile=list.files(permutationPath)
-  permutefile=permutefile[grep("celltree",permutefile)]
-  times=length(permutefile)
-  print.noquote(paste("There are ",length(permutefile)," permutation trees."))
-  if (length(permutefile)>0){
-    permuteres=lapply(permutefile,permuteTreeScore,ID,ans,datatype,pathwaygene,generegion=region,reference,permutationPath)
-  }
-}
+#  print.noquote("Calculating permutation CFL - based on permuted tree structure")
+#  permutefile=list.files(permutationPath)
+#  permutefile=permutefile[grep("celltree",permutefile)]
+#  times=length(permutefile)
+#  print.noquote(paste("There are ",length(permutefile)," permutation trees."))
+#  if (length(permutefile)>0){
+#    permuteres=lapply(permutefile,permuteTreeScore,ID,ans,datatype,pathwaygene,generegion=region,reference,permutationPath)
+#  }
+#}
 
-print("got to the end of permutations")
+#print("got to the end of permutations")
 
 #Estimate emperical p value
-print.noquote("Estimate emperical p value")
+#print.noquote("Estimate emperical p value")
 realcell=realres$cell
 realband=realres$bandGscore
 realgene=realres$geneGscore
@@ -289,7 +338,7 @@ if (!is.null(genesig)){
       LSAres$paraGene=paraGenesig
   }
 }
-print.noquote("Estimate parallel evolution")
+#print.noquote("Estimate parallel evolution")
 
 #collect all significant results
 allsig=c()

@@ -114,7 +114,7 @@ def main():
     g = create_tree(nodes, node_name_list,root)
 
     #Inference of tree and output
-    result = compute_rdmst(g, root)
+    result = compute_rdmst_iterative(g, root)
     write=open(writename,'w')
     tree=result[0]
     out1="from"+"\t"+"to"+"\t"+"dist"
@@ -152,7 +152,7 @@ def main():
             (nodes,root) = read(permutefile)
             node_name_list = nodes.keys()
             g = create_tree(nodes, node_name_list,root)
-            result = compute_rdmst(g, root)
+            result = compute_rdmst_iterative(g, root)
             permuteTree=permutefile+".celltree.txt"
             write=open(permuteTree,'w')
             tree=result[0]
@@ -167,10 +167,13 @@ def main():
         print "Pemutation tree finish."
         print "Performing LSA."
 
+        sys.stdout.flush()
+        
         #Identifying CNAs associated with cellular lineage expansion.
         os.system("Rscript "+scTreepath+"LSA.tree.R "+scTreepath+" "+filename+" "+writename+" "+CNVfile+" "+outpath+" "+datatype+" "+hg+" "+permutationPath)
     elif permutation == "F":
         print "Performing LSA."
+        sys.stdout.flush()
         os.system("Rscript "+scTreepath+"LSA.tree.R "+scTreepath+" "+filename+" "+writename+" "+CNVfile+" "+outpath+" "+datatype+" "+hg)
     os.chdir(outpath)
     print "Done!"

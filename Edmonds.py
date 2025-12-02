@@ -1,7 +1,7 @@
 from Readfile import *
 from ComputeDistance import *
 from copy import *
-from mdmst import *
+from mdmst_copilot_rewrite3 import *
 import time
 import sys
 import os
@@ -28,7 +28,7 @@ def create_tree(nodes, node_name_list, root):
     - No NumPy, no psutil
     - Prints progress and performance stats
     """
-
+    print "IN THE RIGHT VERSION"
     print "[INFO] Starting tree creation..."
     start_time = time.time()
 
